@@ -9,13 +9,14 @@ SECRET_KEY = env("ALTAF_SECRET", "dev-secret-change-me")
 MASTER_MNEMONIC = env("ALTAF_MNEMONIC", "")
 # Split keys: public account keys derive deposit addresses; hot wallet has its own key;
 # the 24 words live only in the signer service (app/signer.py).
-XPUB = {"TRON": env("ALTAF_XPUB_TRON", ""), "BSC": env("ALTAF_XPUB_BSC", "")}
-HOT_KEY = {"TRON": env("ALTAF_HOT_TRON_KEY", ""), "BSC": env("ALTAF_HOT_BSC_KEY", "")}
+XPUB = {c: env(f"ALTAF_XPUB_{c}", "") for c in ("TRON", "BSC", "ETH", "BTC")}
+HOT_KEY = {c: env(f"ALTAF_HOT_{c}_KEY", "") for c in ("TRON", "BSC", "ETH", "BTC", "SOL")}
 SIGNER_URL = env("ALTAF_SIGNER_URL", "")
 SIGNER_TOKEN = env("ALTAF_SIGNER_TOKEN", "")
 TRONGRID_KEY = env("TRONGRID_KEY", "")
 TRON_API = env("TRON_API", "https://api.trongrid.io")
 BSC_RPC = env("BSC_RPC", "https://bsc-dataseed.binance.org")
+ETH_RPC = env("ETH_RPC", "https://ethereum-rpc.publicnode.com")
 ADMIN_EMAILS = [e.strip().lower() for e in env("ALTAF_ADMINS", "").split(",") if e.strip()]
 CHAIN_WORKERS = env("ALTAF_CHAIN", "0") == "1"
 SITE_NAME = "ALTAF Exchange"

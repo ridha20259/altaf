@@ -10,11 +10,13 @@ from bip_utils import Bip44, Bip44Coins, Bip44Changes, Bip39SeedGenerator
 E = os.environ.get
 MNEMONIC = E("ALTAF_MNEMONIC", "")
 TOKEN = E("SIGNER_TOKEN", "")
-HOT = {"TRON": E("SIGNER_HOT_TRON", ""), "BSC": E("SIGNER_HOT_BSC", "")}
+HOT = {c: E(f"SIGNER_HOT_{c}", "") for c in ("TRON", "BSC", "ETH", "BTC", "SOL")}
 CONTRACTS = {c.strip() for c in E("SIGNER_CONTRACTS", "").split(",") if c.strip()}
 ALTF = E("SIGNER_ALTF_CONTRACT", "")
 TRON_API, TRONGRID_KEY = E("TRON_API", "https://api.trongrid.io"), E("TRONGRID_KEY", "")
 BSC_RPC = E("BSC_RPC", "https://bsc-dataseed.binance.org")
+RPC = {"BSC": BSC_RPC, "ETH": E("ETH_RPC", "https://ethereum-rpc.publicnode.com")}
+CHAIN_ID = {"BSC": 56, "ETH": 1}
 OPERATOR_INDEX = 9000
 MAX_OPENS_PER_DAY = int(E("SIGNER_MAX_OPENS_PER_DAY", "2"))
 LOG = Path(E("SIGNER_LOG", "/var/lib/altaf-signer/signer.log"))
@@ -37,8 +39,14 @@ def _auth(tok):
 
 
 def derive(chain, index):
-    coin = Bip44Coins.TRON if chain == "TRON" else Bip44Coins.BINANCE_SMART_CHAIN
-    acc = Bip44.FromSeed(Bip39SeedGenerator(MNEMONIC).Generate(), coin).Purpose().Coin().Account(0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(index)
+    from . import natives
+    seed = Bip39SeedGenerator(MNEMONIC).Generate()
+    if chain == "BTC":
+        return natives.btc_derive(seed, index)
+    if chain == "SOL":
+        return natives.sol_derive(seed, index)
+    coin = {"TRON": Bip44Coins.TRON, "ETH": Bip44Coins.ETHEREUM}.get(chain, Bip44Coins.BINANCE_SMART_CHAIN)
+    acc = Bip44.FromSeed(seed, coin).Purpose().Coin().Account(1 if chain == "ETH" else 0).Change(Bip44Changes.CHAIN_EXT).AddressIndex(index)
     return acc.PublicKey().ToAddress(), acc.PrivateKey().Raw().ToHex()
 
 
@@ -61,16 +69,19 @@ def _send(chain, priv, frm, contract, decimals, to, amount):
         if res.get("receipt", {}).get("result", "SUCCESS") not in ("SUCCESS", None):
             raise RuntimeError(str(res)[:300])
         return r.txid, D(res.get("fee", 0)) / D(10**6)
+    if chain in ("BTC", "SOL"):
+        from . import natives
+        return (natives.btc_send if chain == "BTC" else natives.sol_send)(priv, frm, to, amount)
     from web3 import Web3
-    w3 = Web3(Web3.HTTPProvider(BSC_RPC, request_kwargs={"timeout": 20}))
+    w3 = Web3(Web3.HTTPProvider(RPC[chain], request_kwargs={"timeout": 20}))
     frm, to = w3.to_checksum_address(frm), w3.to_checksum_address(to)
     gp, nonce = w3.eth.gas_price, w3.eth.get_transaction_count(frm)
     if not contract:
-        tx = {"to": to, "value": int(amount * 10**18), "gas": 21000, "gasPrice": gp, "nonce": nonce, "chainId": 56}
+        tx = {"to": to, "value": int(amount * 10**18), "gas": 21000, "gasPrice": gp, "nonce": nonce, "chainId": CHAIN_ID[chain]}
     else:
         abi = [{"constant": False, "inputs": [{"name": "_to", "type": "address"}, {"name": "_value", "type": "uint256"}], "name": "transfer", "outputs": [{"name": "", "type": "bool"}], "type": "function"}]
         tx = w3.eth.contract(address=w3.to_checksum_address(contract), abi=abi).functions.transfer(to, int(amount * 10**decimals)).build_transaction(
-            {"from": frm, "gas": 90000, "gasPrice": gp, "nonce": nonce, "chainId": 56})
+            {"from": frm, "gas": 90000, "gasPrice": gp, "nonce": nonce, "chainId": CHAIN_ID[chain]})
     h = w3.eth.send_raw_transaction(w3.eth.account.sign_transaction(tx, private_key=priv).raw_transaction)
     rc = w3.eth.wait_for_transaction_receipt(h, timeout=180)
     if rc.status != 1:
@@ -103,6 +114,20 @@ def check_sweep(b):
 @app.get("/health")
 def health():
     return {"ok": bool(MNEMONIC and TOKEN), "hot": HOT, "altf": ALTF}
+
+
+@app.post("/address")
+def address(b: dict, x_signer_token: str = Header("")):
+    """Public deposit address for chains whose keys cannot be derived from an xpub (Solana)."""
+    _auth(x_signer_token)
+    chain = str(b.get("chain", ""))
+    try:
+        index = int(b.get("index"))
+    except Exception:
+        raise HTTPException(400, "bad index")
+    if chain not in ("SOL", "BTC", "ETH") or index < 1 or index == OPERATOR_INDEX:
+        raise HTTPException(403, "not allowed")
+    return {"address": derive(chain, index)[0]}
 
 
 @app.post("/sweep")

@@ -125,7 +125,11 @@ NETWORKS = [("USDT", "TRON", "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", 6, "1", "10")
             ("TRX", "TRON", "", 6, "1", "10"), ("BNB", "BSC", "", 18, "0.0005", "0.01"),
             ("BTC", "BSC", "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c", 18, "0.00001", "0.0002"),
             ("ETH", "BSC", "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 18, "0.0002", "0.005"),
-            ("SOL", "BSC", "0x570A5D26f7765Ecb712C0924E4De545B89fD43dF", 18, "0.005", "0.1")]
+            ("SOL", "BSC", "0x570A5D26f7765Ecb712C0924E4De545B89fD43dF", 18, "0.005", "0.1"),
+            ("BTC", "BTC", "", 8, "0.00005", "0.0002"), ("ETH", "ETH", "", 18, "0.0008", "0.005"), ("SOL", "SOL", "", 9, "0.01", "0.05"),
+            ("USDT", "ETH", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6, "3", "10"),
+            ("USDC", "ETH", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "3", "10")]
+NEW_CHAINS = ("BTC", "ETH", "SOL")  # added inactive; the admin turns them on once the hot wallets hold gas
 MARKETS = [("BTCUSDT", "BTC", 2, 6, True, True, 1), ("ETHUSDT", "ETH", 2, 5, True, True, 2), ("BNBUSDT", "BNB", 2, 4, True, True, 3),
            ("SOLUSDT", "SOL", 3, 3, True, True, 4), ("TRXUSDT", "TRX", 5, 1, True, True, 5), ("ALTFUSDT", "ALTF", 4, 2, False, False, 0)]
 EARN = [("USDT", "0.05", 0, "10"), ("USDT", "0.09", 30, "50"), ("ALTF", "0.12", 90, "1"), ("TRX", "0.04", 0, "100")]
@@ -139,7 +143,8 @@ def seed():
                 db.add(Asset(symbol=s, name=n, precision=p, price_source=src, sort=i, website="https://altaf" if s == "ALTF" else ""))
         for a, c, con, dec, fee, mn in NETWORKS:
             if not db.scalars(select(AssetNetwork).where(AssetNetwork.asset == a, AssetNetwork.chain == c)).first():
-                db.add(AssetNetwork(asset=a, chain=c, contract=con, decimals=dec, withdraw_fee=D(fee), min_withdraw=D(mn) * 2, min_deposit=D(mn) / 10))
+                db.add(AssetNetwork(asset=a, chain=c, contract=con, decimals=dec, withdraw_fee=D(fee), min_withdraw=D(mn) * 2, min_deposit=D(mn) / 10,
+                                    active=c not in NEW_CHAINS))
         for sym, base, pp, qp, ext, f, sort in MARKETS:
             if not db.get(Market, sym):
                 db.add(Market(symbol=sym, base=base, quote="USDT", price_prec=pp, qty_prec=qp, min_notional=D(1), external=ext, futures=f, sort=sort))
@@ -405,6 +410,8 @@ def deposit_address(chain: str, u=Depends(current_user), db=Depends(get_db)):
         raise HTTPException(400, "Unknown network")
     if not setting(db, "deposits_enabled", bool):
         raise HTTPException(400, "Deposits are paused")
+    if not db.scalars(select(AssetNetwork).where(AssetNetwork.chain == chain, AssetNetwork.active == True)).first():  # noqa: E712
+        raise HTTPException(400, "This network opens soon")
     try:
         with WRITE_LOCK:
             row = ch.get_address(db, u.id, chain)
@@ -430,6 +437,9 @@ def valid_address(chain, addr):
     if chain == "TRON":
         from tronpy.keys import is_base58check_address
         return is_base58check_address(addr)
+    if chain in ("BTC", "SOL"):
+        from . import natives
+        return natives.btc_valid(addr) if chain == "BTC" else natives.sol_valid(addr)
     return bool(re.match(r"^0x[0-9a-fA-F]{40}$", addr))
 
 
