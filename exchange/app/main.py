@@ -17,6 +17,7 @@ from .engine import OrderError
 from .security import (hash_pw, check_pw, make_token, read_token, new_totp_secret, check_totp, totp_uri, limiter, log_event)
 from .servers import ServerNode
 from . import apikeys
+from . import referral
 from fastapi import WebSocket
 
 log = logging.getLogger("altaf")
@@ -212,9 +213,17 @@ def register(body: dict, request: Request, db=Depends(get_db)):
     u = User(email=email, pw_hash=hash_pw(pw), is_admin=email in ADMIN_EMAILS, nickname=email.split("@")[0][:20])
     db.add(u)
     db.flush()
+    referral.attach(db, u.id, str(body.get("ref", "")))
     log_event(db, "register", u.id, ip)
     db.commit()
     return {"token": make_token(u.id, u.token_version), "user": me_view(db, u)}
+
+
+@app.get("/api/referral")
+def my_referral(u=Depends(current_user), db=Depends(get_db)):
+    out = referral.stats(db, u.id)
+    db.commit()
+    return out
 
 
 @app.post("/api/login")

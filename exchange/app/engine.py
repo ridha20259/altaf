@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 from .db import Order, Trade, Market, Asset, User
 from .ledger import move, transfer, setting, house_id, bal, InsufficientFunds, D, ZERO
 from . import prices
+from . import referral
 
 
 class OrderError(Exception):
@@ -62,9 +63,11 @@ def charge_fee(db, uid, asset, amount, rate, ref):
             b = bal(db, uid, "ALTF")
             if fee_altf > 0 and b.available >= fee_altf:
                 transfer(db, uid, fees, "ALTF", fee_altf, "fee", ref)
+                referral.pay(db, uid, "ALTF", fee_altf, ref)
                 return amount
     fee = q(fee, 8)
     move(db, fees, asset, d_avail=fee, kind="fee", ref=ref)
+    referral.pay(db, uid, asset, fee, ref)
     return amount - fee
 
 
