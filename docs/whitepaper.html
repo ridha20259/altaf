@@ -1,0 +1,87 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ALTAF Whitepaper v1.0 </title>
+<style>body{font-family:"DejaVu Sans",Arial,sans-serif;max-width:800px;margin:40px auto;color:#1b1b1b;line-height:1.55;font-size:13px}
+h1{color:#b8860b;font-size:30px;margin-bottom:0}h2{color:#8a6500;border-bottom:2px solid #e8d9a8;padding-bottom:3px;margin-top:28px}
+table{border-collapse:collapse;width:100%;margin:8px 0}td,th{border:1px solid #ccc;padding:5px 8px;text-align:left}th{background:#f6efd9}
+code{background:#f3f3f3;padding:1px 4px;border-radius:3px;font-size:12px}.mut{color:#666}.ar{direction:rtl;text-align:right;font-size:14px}
+.box{background:#fbf7ea;border-left:4px solid #b8860b;padding:8px 12px;margin:10px 0}</style></head><body>
+<h1>ALTAF</h1><p><b>Whitepaper v1.0 — November 2026</b><br><span class="mut">ALTAF Exchange · ALTF token · ALTAF native network</span></p>
+
+<h2>1. Summary</h2>
+<p>ALTAF is a crypto ecosystem made of three parts that work together:</p>
+<ul><li><b>ALTAF Exchange</b> — a full trading platform: spot, futures, P2P, convert, Earn, Launchpad, Token Factory, listings, copy trading, trading bots, ALTAF Pay, governance, API keys and real-time market data.</li>
+<li><b>ALTF</b> — a TRC20 token on TRON with a fixed supply of 21,000,000 and a verified, public contract.</li>
+<li><b>ALTAF Network</b> — a native proof-of-work blockchain that anyone can mine, connected to the exchange by a bridge.</li></ul>
+<p>The goal is a North-African-founded exchange and network that is transparent by design: verified contract code, public proof of reserves, and partner-run infrastructure with on-chain governance rights.</p>
+
+<h2>2. ALTF token (TRON)</h2>
+<table><tr><th>Item</th><th>Value</th></tr>
+<tr><td>Contract</td><td><code>TVjAVxeT6VVZNbSNMmoi8j3ZBFqDBN5y37</code> (source verified on TronScan)</td></tr>
+<tr><td>Name / symbol / decimals</td><td>Altaf / ALTF / 6</td></tr>
+<tr><td>Total supply</td><td>21,000,000 ALTF — fixed, no mint function</td></tr>
+<tr><td>Founder allocation</td><td>5,000,000 ALTF</td></tr>
+<tr><td>Server (partner) reserve</td><td>16,000,000 ALTF held by the contract itself</td></tr>
+<tr><td>Burn</td><td>Any holder can burn; burned tokens reduce circulating supply</td></tr></table>
+<h3>Partner servers</h3>
+<p>The contract supports up to <b>16 partner servers</b>. When the operator opens a server, <b>1,000,000 ALTF</b> is allocated to it and locked. The lock releases <b>100 ALTF every 90 days</b>, so partner allocations enter circulation slowly and predictably. Closing a server returns its still-locked balance to the contract reserve. All of this is enforced by the contract, not by promises.</p>
+<p>On-chain views: <code>reserve()</code>, <code>circulatingSupply()</code>, <code>transferable(address)</code>.</p>
+
+<h2>3. ALTAF Network (native chain)</h2>
+<ul><li><b>Consensus:</b> proof of work with two mining lanes — a CPU algorithm for ordinary computers and SHA-256 for ASIC machines. Each lane produces half of the blocks, so home miners are not pushed out by industrial hardware.</li>
+<li><b>Launch emission:</b> 2,000,000 coins mined over the first 12 months (≈5,480 per day), with a cap per mining address.</li>
+<li><b>Founder share:</b> 10% of each block reward.</li>
+<li><b>Fees:</b> half of every transaction fee goes to the miner, half is burned.</li>
+<li><b>After year one:</b> very small emission, designed so that monthly new coins stay below the previous month's burn. Total supply never exceeds 21,000,000; burning stops at 10,000,000.</li>
+<li><b>Addresses</b> start with <code>A</code>. Public node and explorer: <code>altafnet.187-126-9-68.sslip.io</code>; stratum mining on port 3333; Windows miner available.</li>
+<li><b>Bridge:</b> ALTF can move between TRON (TRC20) and the native network through the exchange.</li></ul>
+
+<h2>4. ALTAF Exchange</h2>
+<table><tr><th>Area</th><th>Features (live)</th></tr>
+<tr><td>Trading</td><td>Spot order book, futures with leverage, convert, P2P</td></tr>
+<tr><td>Products</td><td>Earn, Launchpad, Token Factory (create a token on TRON/BSC), paid listings</td></tr>
+<tr><td>Automation</td><td>Grid / DCA bots, copy trading, API keys (HMAC-SHA256 signed, read-only or trading, never withdrawals), WebSocket market stream</td></tr>
+<tr><td>Payments</td><td>ALTAF Pay — free transfers between users by e-mail</td></tr>
+<tr><td>Networks</td><td>TRON, BNB Smart Chain, ALTAF Network</td></tr>
+<tr><td>Apps</td><td>Web, Android APK, iPhone home-screen app; Arabic, French, English</td></tr>
+<tr><td>Fee discount</td><td>Paying fees in ALTF gives a discount</td></tr></table>
+<p>Real-money flow tested on TRON mainnet: deposit detected and credited automatically, swept to the hot wallet, and withdrawn automatically to an external wallet.</p>
+
+<h2>5. Security and transparency</h2>
+<ul><li>Withdrawal signing runs in a separate signer service; user deposit addresses are derived per user.</li>
+<li>2FA (TOTP) for accounts and withdrawals.</li>
+<li>Hot wallet above a set limit is moved to a cold address.</li>
+<li><b>Proof of reserves:</b> a public page compares total user balances with the platform's on-chain wallets, refreshed every 10 minutes.</li>
+<li>Encrypted daily backups stored off-server, with tested restore.</li></ul>
+
+<h2>6. Governance</h2>
+<p>Owners of active partner servers vote on platform proposals: one active server = one vote, 7-day votes, 2FA required. The founder holds a veto; the first four partners are founding partners, and any two of them together can override the founder's veto.</p>
+
+<h2>7. Partners — server owners</h2>
+<p>ALTAF is built with its partners. The network has <b>17 servers</b>: the founder's server plus <b>16 partner servers</b>.</p>
+<ul><li>Every partner server receives <b>1,000,000 ALTF</b>, allocated automatically by the contract when the server is opened.</li>
+<li>Every active server holds <b>one vote</b> in platform governance; the first four partners are founding partners with a shared veto.</li>
+<li>Platform fee revenue is shared by the first servers: founder server 50%, second 25%, third 15%, fourth 10%.</li>
+<li>Any partner can join with one command: <code>curl -fsSL https://altafnet.187-126-9-68.sslip.io/install.sh | sudo bash</code> installs a full ALTAF node that connects to the network automatically.</li>
+<li>If a server is closed, its locked coins return to the reserve for the next partner, so seats always stay filled.</li></ul>
+
+<h2>8. Real solutions</h2>
+<p>ALTAF sells services that exchanges and their users need, paid in ALTF:</p>
+<table><tr><th>For exchanges</th><th>For users</th></tr>
+<tr><td>Fast, low-cost transfer network between exchanges</td><td>Recovery of funds sent on the wrong network</td></tr>
+<tr><td>Proof of Reserves as a service</td><td>Address and network check before sending</td></tr>
+<tr><td>Shared, reusable KYC</td><td>P2P escrow</td></tr>
+<tr><td>Screening of risky or stolen wallets</td><td>One wallet linked to many exchanges</td></tr>
+<tr><td>Travel Rule messaging</td><td>One dashboard for all balances</td></tr>
+<tr><td>Local payment rails (dinar, North Africa)</td><td>Free transfers with ALTAF Pay</td></tr></table>
+
+<h2>9. Roadmap</h2>
+<table><tr><th>Status</th><th>Item</th></tr>
+<tr><td>Done</td><td>Exchange modules, ALTF contract (verified), native mainnet, bridge, real-money TRON test, API keys + WebSocket, mobile apps, proof of reserves, off-server backups, one-command partner node installer</td></tr>
+<tr><td>Next</td><td>Bitcoin / Ethereum / Solana networks, PostgreSQL database, smart contracts on ALTAF Network</td></tr>
+<tr><td>Later</td><td>ALTF liquidity and market listings (CoinGecko / CoinMarketCap), independent security audit, open-source code release, licensing, card and bank payments</td></tr></table>
+
+<h2 class="ar">ملخص بالعربية</h2>
+<div class="ar"><p><b>ALTAF</b> منظومة من ثلاثة أجزاء: منصة تداول كاملة، وعملة ALTF على شبكة TRON (21 مليون، عقد موثّق في ترونسكان)، وشبكة ALTAF الخاصة التي يعدّنها أي شخص بالحاسوب العادي أو بالأجهزة الكبيرة.</p>
+<p>المؤسس يملك 5 ملايين ALTF. و16 مليوناً محجوزة في العقد لـ16 سيرفر شريك، لكل سيرفر مليون، يُفتح منها 100 ALTF كل 90 يوماً.</p>
+<p>الشفافية: كود العقد منشور، وصفحة إثبات الاحتياطي عامة، ونسخ احتياطية مشفّرة يومية، وتصويت للشركاء.</p>
+<p>أصحاب السيرفرات شركاء: لكل سيرفر مليون ALTF وحق التصويت، وأوائل الشركاء يتقاسمون رسوم المنصة.</p></div>
+</body></html>

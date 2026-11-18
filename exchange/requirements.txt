@@ -1,0 +1,16 @@
+fastapi==0.162.5
+starlette==1.7.0
+uvicorn==0.54.0
+SQLAlchemy==2.0.58
+httpx==0.28.1
+pydantic==2.14.3
+python-multipart==0.0.32
+bcrypt==5.0.0
+PyOTP==2.12.0
+tronpy==0.6.2
+web3==7.16.0
+eth-account==0.14.0
+bip-utils==2.12.3
+base58==2.1.1
+coincurve==21.0.0
+ecdsa==0.19.2

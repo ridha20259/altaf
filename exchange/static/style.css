@@ -1,0 +1,18 @@
+:root{--bg:#0b0e11;--card:#181a20;--line:#2b3139;--txt:#eaecef;--mut:#848e9c;--gold:#f0b90b;--up:#0ecb81;--dn:#f6465d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;padding-bottom:64px}
+a{color:var(--gold);text-decoration:none}header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+.logo{font-weight:800;font-size:18px;color:var(--gold)}.logo span{color:var(--txt);font-weight:400;margin-inline-start:4px;font-size:13px}
+main{max-width:1100px;margin:auto;padding:12px}nav#tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--card);border-top:1px solid var(--line);z-index:5}
+nav#tabs a{flex:1;text-align:center;padding:12px 2px;color:var(--mut);font-size:12px}nav#tabs a.on{color:var(--gold)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px}h2{font-size:17px;margin:4px 0 12px}h3{font-size:15px;margin:6px 0}
+table{width:100%;border-collapse:collapse}td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:start;font-size:13px}th{color:var(--mut);font-weight:400}
+.up{color:var(--up)}.dn{color:var(--dn)}.mut{color:var(--mut);font-size:12px}
+input,select,textarea{width:100%;background:#0b0e11;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:10px;margin:4px 0 8px;font-size:15px}
+button{background:var(--gold);color:#000;border:0;border-radius:8px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer}button.sec{background:#2b3139;color:var(--txt)}button.buy{background:var(--up);color:#fff}button.sell{background:var(--dn);color:#fff}
+button.sm{padding:6px 10px;font-size:12px}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}.full{width:100%}
+.seg{display:flex;gap:6px;margin-bottom:8px}.seg button{flex:1;background:#2b3139;color:var(--txt)}.seg button.on{background:var(--gold);color:#000}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}.b-ok{background:#0ecb8133;color:var(--up)}.b-watch{background:#f0b90b33;color:var(--gold)}.b-danger,.b-banned{background:#f6465d33;color:var(--dn)}
+.book td{padding:3px 4px;font-size:12px}#chart{height:300px}.grid{display:grid;grid-template-columns:1fr;gap:12px}@media(min-width:900px){.grid{grid-template-columns:2fr 1fr}}
+#toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#2b3139;padding:10px 16px;border-radius:8px;display:none;z-index:9;max-width:90%}
+.warn{background:#f6465d1a;border:1px solid #f6465d55;padding:10px;border-radius:8px;font-size:13px}code{word-break:break-all;color:var(--gold)}
+#lang{width:auto;margin:0 0 0 8px;padding:4px 6px;font-size:13px}

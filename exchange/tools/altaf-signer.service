@@ -1,0 +1,17 @@
+[Unit]
+Description=ALTAF signer (holds the 24 words; sweeps to hot wallet only)
+After=network-online.target
+[Service]
+User=altafsign
+WorkingDirectory=/opt/altaf
+EnvironmentFile=/etc/altaf-signer.env
+Environment=SIGNER_LOG=/var/lib/altaf-signer/signer.log
+ExecStart=/opt/altaf/venv/bin/uvicorn app.signer:app --host 127.0.0.1 --port 8101 --workers 1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/altaf-signer
+PrivateTmp=true
+[Install]
+WantedBy=multi-user.target

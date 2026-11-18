@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="/i18n.js"></script>
+<title>ALTAF — المحفظة والمستكشف</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;--acc:#d4a72c}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Tahoma,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;gap:8px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header b{color:var(--acc);font-size:20px;margin-left:auto}nav a{color:var(--fg);text-decoration:none;padding:8px 12px;border-radius:8px;background:var(--card)}
+main{max-width:900px;margin:auto;padding:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.k{color:var(--mut);font-size:13px}.v{font-size:18px;margin-top:4px;word-break:break-all}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mut);font-weight:normal}
+a{color:#58a6ff}.mono{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;direction:ltr;unicode-bidi:embed}
+input,button{width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:#0d1117;color:var(--fg);font-size:16px;margin:6px 0}
+button{background:var(--acc);color:#000;font-weight:bold;border:0;cursor:pointer}button.sec{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+.ok{color:#3fb950}.err{color:#f85149}.big{font-size:30px;color:var(--acc)}
+</style></head><body>
+<header><b>ALTAF</b><nav><a href="#/">المستكشف</a> <a href="#/wallet">محفظتي</a></nav></header>
+<main id="app">...</main>
+<script>
+const U=1e6,$=s=>document.querySelector(s),app=$('#app');
+const fmt=x=>(x/U).toLocaleString('en-US',{maximumFractionDigits:6});
+const short=h=>h.slice(0,10)+'…'+h.slice(-6);
+const ago=t=>{const s=Math.max(0,Date.now()/1000-t|0);return s<60?s+' ث':s<3600?(s/60|0)+' د':s<86400?(s/3600|0)+' س':(s/86400|0)+' يوم'};
+const algo=a=>a==1?'حاسوب عادي':'SHA-256';
+async function api(p,o){const r=await fetch(p,o);const j=await r.json();if(!r.ok)throw new Error(j.error||r.status);return j}
+const esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+// ---- crypto helpers ----
+const B58='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+function b58(b){let n=0n;for(const x of b)n=n*256n+BigInt(x);let s='';while(n>0n){s=B58[Number(n%58n)]+s;n/=58n}for(const x of b){if(x)break;s='1'+s}return s}
+const sha=async b=>new Uint8Array(await crypto.subtle.digest('SHA-256',b));
+const cat=(...a)=>{const o=new Uint8Array(a.reduce((s,x)=>s+x.length,0));let i=0;for(const x of a){o.set(x,i);i+=x.length}return o};
+async function addrOf(pub){const h=(await sha(pub)).slice(0,20);const raw=cat([0x17],h);const c=await sha(await sha(raw));return b58(cat(raw,c.slice(0,4)))}
+const hex=b=>[...b].map(x=>x.toString(16).padStart(2,'0')).join(''),unhex=h=>new Uint8Array(h.match(/../g).map(x=>parseInt(x,16)));
+const b64=b=>btoa(String.fromCharCode(...b));
+const PK8=unhex('302e020100300506032b657004220420');
+async function keyFromSeed(seed){const k=await crypto.subtle.importKey('pkcs8',cat(PK8,seed),{name:'Ed25519'},true,['sign']);const jwk=await crypto.subtle.exportKey('jwk',k);
+ const pub=Uint8Array.from(atob(jwk.x.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));return {k,pub,addr:await addrOf(pub)}}
+async function pwKey(pw,salt){const b=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:200000,hash:'SHA-256'},b,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function saveSeed(seed,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+ const ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await pwKey(pw,salt),seed));localStorage.altafWallet=JSON.stringify({salt:hex(salt),iv:hex(iv),ct:hex(ct)})}
+async function loadSeed(pw){const w=JSON.parse(localStorage.altafWallet);return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:unhex(w.iv)},await pwKey(pw,unhex(w.salt)),unhex(w.ct)))}
+const le64=v=>{const b=new Uint8Array(8);new DataView(b.buffer).setBigUint64(0,BigInt(v),true);return b};
+function sigBytes(t){const e=new TextEncoder(),to=e.encode(t.to),m=e.encode(t.memo||'');return cat(e.encode('ALTF-TX-v1'),t.pub,[to.length],to,le64(t.amount),le64(t.fee),le64(t.nonce),[m.length],m)}
+let W=null;
+// ---- pages ----
+async function home(){const s=await api('/status'),bl=await api('/blocks');const g=s.supply;
+ app.innerHTML=`<div class="card"><input id=q placeholder="ابحث: رقم كتلة، عنوان، أو معرّف تحويل"></div>
+ <div class="card grid"><div><div class=k>الكتل</div><div class=v>${s.height}</div></div><div><div class=k>المعروض الكلي</div><div class=v>${fmt(g.supply)}</div></div>
+ <div><div class=k>باقي مخزون التعدين</div><div class=v>${fmt(g.pool_left)}</div></div><div><div class=k>المحروق</div><div class=v>${fmt(g.burned)}</div></div>
+ <div><div class=k>مكافأة الكتلة القادمة</div><div class=v>${fmt(s.next_reward[1])}</div></div><div><div class=k>تحويلات تنتظر</div><div class=v>${s.mempool}</div></div></div>
+ <div class=card><h3>التعدين بحاسوبك</h3><a href="/altaf-miner-windows.zip">حمّل برنامج التعدين لويندوز</a><p class=k>فكّ الضغط، ثم شغّل start-mining.bat والصق عنوانك.</p></div>
+ <div class=card><table><tr><th>الكتلة</th><th>النوع</th><th>المعدّن</th><th>تحويلات</th><th>منذ</th></tr>${bl.map(b=>`<tr><td><a href="#/block/${b.height}">${b.height}</a></td><td>${algo(b.algo)}</td><td><a class=mono href="#/address/${b.miner}">${short(b.miner)}</a></td><td>${b.txs}</td><td>${ago(b.time)}</td></tr>`).join('')}</table></div>`;
+ $('#q').onkeydown=e=>{if(e.key!='Enter')return;const v=e.target.value.trim();location.hash=/^\d+$/.test(v)?'#/block/'+v:v.length==64?'#/tx/'+v:'#/address/'+v}}
+async function block(id){const b=await api('/block/'+id),h=b.header;const hh=await blockHash(id,b);
+ app.innerHTML=`<div class=card><div class=k>الكتلة</div><div class=big>${esc(id.length<20?id:'')}</div><div class="mono">${hh}</div>
+ <p>النوع: ${algo(h.version&255)} · الوقت: ${new Date(h.time*1000).toLocaleString()} · السابقة: <a class=mono href="#/block/${h.prev}">${short(h.prev)}</a></p></div>
+ <div class=card><table><tr><th>من</th><th>إلى</th><th>المبلغ</th><th>الرسوم</th></tr>${(b.txs||[]).map(t=>`<tr><td class=mono>${esc(short(t.from))}</td><td><a class=mono href="#/address/${esc(t.to)}">${esc(short(t.to))}</a></td><td>${fmt(t.amount)}</td><td>${fmt(t.fee)}</td></tr>`).join('')||'<tr><td colspan=4>لا تحويلات</td></tr>'}</table></div>`}
+async function blockHash(id,b){if(id.length==64)return id;const l=await api('/blocks?from='+id);return l[0]?l[0].hash:''}
+async function address(a){const [acc,hist]=await Promise.all([api('/account/'+a),api('/history/'+a)]);
+ app.innerHTML=`<div class=card><div class=k>العنوان</div><div class=mono>${esc(a)}</div><div class=big>${fmt(acc.balance)} ALTF</div><div class=k>عدّن في المرحلة الأولى: ${fmt(acc.mined)} / 100,000</div></div>
+ <div class=card><table><tr><th>النوع</th><th>المبلغ</th><th>الكتلة</th></tr>${hist.map(x=>`<tr><td>${{send:'إرسال',receive:'استلام',mined:'تعدين'}[x.kind]}</td><td>${x.kind=='mined'?'—':fmt(x.amount)}</td><td><a href="#/block/${x.height}">${x.height}</a></td></tr>`).join('')||'<tr><td colspan=3>لا شيء بعد</td></tr>'}</table></div>`}
+async function tx(id){const l=await api('/tx/'+id);const t=l.tx;
+ app.innerHTML=`<div class=card><div class=k>التحويل</div><div class=mono>${esc(id)}</div><p>${l.kind=='pending'?'<span class=err>ينتظر التأكيد</span>':'<span class=ok>مؤكد في الكتلة <a href="#/block/'+l.height+'">'+l.height+'</a></span>'}</p>
+ <p>إلى: <a class=mono href="#/address/${esc(t.to)}">${esc(t.to)}</a></p><p>المبلغ: ${fmt(t.amount)} ALTF · الرسوم: ${fmt(t.fee)}</p></div>`}
+async function wallet(){
+ if(!crypto.subtle||!window.isSecureContext){app.innerHTML='<div class=card>افتح الصفحة عبر https</div>';return}
+ if(!localStorage.altafWallet){app.innerHTML=`<div class=card><h3>محفظة جديدة</h3><p class=k>اختر كلمة سر لهذا الهاتف. ثم احفظ «مفتاح الاسترجاع» في مكان آمن: من يملكه يملك المال.</p>
+  <input id=pw type=password placeholder="كلمة سر (8 أحرف على الأقل)"><button id=mk>إنشاء محفظة</button><hr style="border-color:#30363d">
+  <input id=rs placeholder="أو الصق مفتاح الاسترجاع (64 حرفاً)"><button class=sec id=imp>استرجاع محفظة</button><div id=msg></div></div>`;
+  const go=async seed=>{const pw=$('#pw').value;if(pw.length<8){$('#msg').innerHTML='<span class=err>كلمة السر قصيرة</span>';return}await saveSeed(seed,pw);W=await keyFromSeed(seed);
+   app.innerHTML=`<div class=card><h3 class=ok>تم إنشاء محفظتك</h3><p>مفتاح الاسترجاع (انسخه واحفظه، لن يظهر مرة أخرى):</p><div class=mono style="background:#000;padding:10px">${hex(seed)}</div><button onclick="location.hash='#/wallet';wallet()">حفظته، تابع</button></div>`};
+  $('#mk').onclick=()=>go(crypto.getRandomValues(new Uint8Array(32)));
+  $('#imp').onclick=()=>{const v=$('#rs').value.trim();if(!/^[0-9a-f]{64}$/i.test(v)){$('#msg').innerHTML='<span class=err>مفتاح غير صحيح</span>';return}go(unhex(v.toLowerCase()))};return}
+ if(!W){app.innerHTML=`<div class=card><input id=pw type=password placeholder="كلمة السر"><button id=un>فتح المحفظة</button><div id=msg></div></div>`;
+  $('#un').onclick=async()=>{try{W=await keyFromSeed(await loadSeed($('#pw').value));wallet()}catch(e){$('#msg').innerHTML='<span class=err>كلمة سر خاطئة</span>'}};return}
+ const acc=await api('/account/'+W.addr);
+ app.innerHTML=`<div class=card><div class=k>عنواني (للاستلام وللتعدين)</div><div class=mono id=me>${W.addr}</div><button class=sec onclick="navigator.clipboard.writeText('${W.addr}')">نسخ العنوان</button>
+  <div class=big>${fmt(acc.balance)} ALTF</div><a href="#/address/${W.addr}">السجل</a></div>
+  <div class=card><h3>إرسال</h3><input id=to placeholder="عنوان المستلم"><input id=am type=number step=0.000001 placeholder="المبلغ"><p class=k>الرسوم: 0.01 ALTF. نصفها للمعدّن ونصفها يُحرق.</p><button id=snd>إرسال</button><div id=msg></div></div>`;
+ $('#snd').onclick=async()=>{const m=$('#msg');try{const amount=Math.round(parseFloat($('#am').value)*U),to=$('#to').value.trim();if(!(amount>0))throw new Error('مبلغ غير صحيح');
+  const a=await api('/account/'+W.addr);let nonce=a.nonce+1;const pend=(await api('/mempool')).filter(t=>t.from==b64(W.pub)).length;nonce+=pend;
+  const t={pub:W.pub,to,amount,fee:10000,nonce,memo:''};const sig=new Uint8Array(await crypto.subtle.sign('Ed25519',W.k,sigBytes(t)));
+  const r=await api('/tx',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:b64(W.pub),to,amount,fee:10000,nonce,sig:b64(sig)})});
+  m.innerHTML=`<span class=ok>أُرسل. </span><a href="#/tx/${r.txid}">تتبّع التحويل</a>`}catch(e){m.innerHTML='<span class=err>'+esc(e.message)+'</span>'}}}
+async function route(){const [,p,x]=location.hash.split('/');try{if(p=='block')await block(x);else if(p=='address')await address(x);else if(p=='tx')await tx(x);else if(p=='wallet')await wallet();else await home()}catch(e){app.innerHTML='<div class="card err">'+esc(e.message)+'</div>'}}
+addEventListener('hashchange',route);route();
+</script></body></html>
