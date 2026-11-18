@@ -272,7 +272,9 @@ def handle(db, up):
         return
     u = get_user(db, m["from"])
     t = (m.get("text") or "").strip()
-    if t.startswith("/start"):
+    if t.startswith("/start") and " " in t and t.split(maxsplit=1)[1].startswith("link-"):
+        text = link(db, u, t.split(maxsplit=1)[1][5:])
+    elif t.startswith("/start"):
         arg = t.split(maxsplit=1)[1] if " " in t else ""
         if arg and not u.invited_by and u.claims == 0:
             inv = resolve_inviter(db, arg, u.tg_id)
