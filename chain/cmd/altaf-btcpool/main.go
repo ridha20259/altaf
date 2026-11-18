@@ -1,7 +1,9 @@
 // altaf-btcpool: Bitcoin stratum v1 mining pool for ALTAF.
 // Waits until a synced bitcoind answers on RPC, then accepts ASIC miners on -listen.
-// Blocks pay the pool address; every found block is written to blocks.jsonl with the PPLNS split
-// (pool fee kept) so the exchange can credit miners after 100 confirmations.
+// Worker username = the miner's Bitcoin address (optionally "address.rig1").
+// Blocks pay the pool wallet address; every found block is written to blocks.jsonl with the PPLNS split
+// (pool fee kept). Once a block is mature (101 confirmations) the pool pays every miner automatically
+// from the bitcoind wallet (sendmany); orphaned blocks are skipped. Payments are logged to payouts.jsonl.
 package main
 
 import (
@@ -32,6 +34,8 @@ var (
 	rpcUser = env("BTC_RPC_USER", "")
 	rpcPass = env("BTC_RPC_PASS", "")
 	payAddr = env("BTC_POOL_ADDRESS", "")
+	wallet  = env("BTC_WALLET", "altafpool")
+	minPay  = int64(10000)
 	feePct  = 2.0
 	dataDir = "/var/lib/altaf-btcpool"
 	diff0   = 65536.0
@@ -72,9 +76,15 @@ func varint(n uint64) []byte {
 
 // ---------- bitcoind RPC ----------
 
-func rpc(method string, params []any, out any) error {
+func rpc(method string, params []any, out any) error { return rpcAt(rpcURL, method, params, out) }
+
+func rpcWallet(method string, params []any, out any) error {
+	return rpcAt(strings.TrimRight(rpcURL, "/")+"/wallet/"+wallet, method, params, out)
+}
+
+func rpcAt(url, method string, params []any, out any) error {
 	body, _ := json.Marshal(map[string]any{"jsonrpc": "1.0", "id": "pool", "method": method, "params": params})
-	req, _ := http.NewRequest("POST", rpcURL, bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", url, bytes.NewReader(body))
 	req.SetBasicAuth(rpcUser, rpcPass)
 	req.Header.Set("Content-Type", "application/json")
 	r, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
@@ -411,10 +421,18 @@ func (p *pool) handle(c net.Conn) {
 			cl.send(map[string]any{"id": m.ID, "error": nil, "result": []any{[][]string{{"mining.notify", "altaf"}}, hex.EncodeToString(en1), en2Size}})
 		case "mining.authorize":
 			if len(ps) == 0 || ps[0] == "" {
-				cl.send(map[string]any{"id": m.ID, "error": []any{24, "username required (ALTAF account e-mail or BTC address)", nil}, "result": false})
+				cl.send(map[string]any{"id": m.ID, "error": []any{24, "username required: your Bitcoin address", nil}, "result": false})
 				continue
 			}
-			cl.user, cl.authed = strings.SplitN(ps[0], ".", 2)[0], true
+			addr := strings.SplitN(ps[0], ".", 2)[0]
+			var va struct {
+				IsValid bool `json:"isvalid"`
+			}
+			if rpc("validateaddress", []any{addr}, &va) != nil || !va.IsValid {
+				cl.send(map[string]any{"id": m.ID, "error": []any{24, "username must be your Bitcoin address (address.worker)", nil}, "result": false})
+				continue
+			}
+			cl.user, cl.authed = addr, true
 			cl.send(map[string]any{"id": m.ID, "error": nil, "result": true})
 			cl.send(map[string]any{"id": nil, "method": "mining.set_difficulty", "params": []any{cl.diff}})
 			p.mu.Lock()
@@ -446,6 +464,8 @@ func main() {
 	flag.Float64Var(&feePct, "fee", feePct, "pool fee percent")
 	flag.Float64Var(&diff0, "diff", diff0, "starting share difficulty")
 	flag.StringVar(&dataDir, "data", dataDir, "data directory")
+	flag.Int64Var(&minPay, "min-payout", minPay, "minimum payout in satoshi (smaller amounts carry over)")
+	payEvery := flag.Duration("payout-every", 10*time.Minute, "how often mature blocks are paid out")
 	flag.Parse()
 	os.MkdirAll(dataDir, 0750)
 	if payAddr == "" {
@@ -472,6 +492,7 @@ func main() {
 	if err := p.refresh(); err != nil {
 		log.Fatal(err)
 	}
+	go payoutLoop(*payEvery)
 	go func() {
 		for {
 			time.Sleep(5 * time.Second)

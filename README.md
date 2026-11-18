@@ -45,8 +45,7 @@ MIT
 ## Bitcoin mining pool (partners with a bigger server)
 
 ```bash
-curl -fsSL https://altafnet.187-126-9-68.sslip.io/install-bitcoind.sh | sudo bash   # pruned Bitcoin Core (~15 GB)
-# then run chain/cmd/altaf-btcpool with BTC_POOL_ADDRESS=<pool BTC address> and the RPC settings from /etc/altaf-btcpool.env
+curl -fsSL https://raw.githubusercontent.com/ridha20259/altaf/main/chain/dist/linux/install-bitcoind.sh | sudo bash   # pruned Bitcoin Core (~15 GB) + pool wallet + altaf-btcpool service
 ```
 
-`altaf-btcpool` waits until the node is synced, then accepts ASIC miners (stratum v1, port 3334, username = ALTAF account e-mail). Found blocks and the PPLNS split (2 % pool fee) are written to `blocks.jsonl`.
+`altaf-btcpool` waits until the node is synced, then accepts ASIC miners (stratum v1, port 3334, username = the miner's Bitcoin address, e.g. their BTC deposit address on the ALTAF exchange). Found blocks and the PPLNS split (2 % pool fee) are written to `blocks.jsonl`. Payouts are automatic: once a block has 101 confirmations the pool sends every miner's share from the pool wallet in one `sendmany` (network fee split between recipients, minimum 10,000 sat, smaller amounts carry over, orphaned blocks pay nothing); payments are logged to `payouts.jsonl`.
