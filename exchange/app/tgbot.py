@@ -282,7 +282,7 @@ def handle(db, up):
                 u.invited_by = inv
                 db.get(TgUser, inv).invites += 1
         text = tr(u, "welcome", n=u.name or "", d=days_left(db))
-    elif t.startswith("/link"):
+    elif t.lower().lstrip("/").startswith("link"):
         text = link(db, u, t.split(maxsplit=1)[1] if " " in t else "")
     else:
         text = tr(u, "welcome", n=u.name or "", d=days_left(db))
