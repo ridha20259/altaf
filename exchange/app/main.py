@@ -19,6 +19,7 @@ from .servers import ServerNode
 from . import apikeys
 from . import referral
 from . import tgbot
+from . import staking
 from fastapi import WebSocket
 
 log = logging.getLogger("altaf")
@@ -187,6 +188,7 @@ def startup():
     loop("futures-risk", fut.risk_loop_once, 2)
     loop("p2p-expire", p2p.expire, 30)
     loop("earn", earn.accrue_all, 600)
+    loop("staking", staking.run, 3600)
     loop("listing-renew", listing.renew_job, 900)
     loop("risk-review", risk.review_all, 3600)
     loop("bots", lambda db: bots.tick(), 15)
