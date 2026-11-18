@@ -18,6 +18,7 @@ from .security import (hash_pw, check_pw, make_token, read_token, new_totp_secre
 from .servers import ServerNode
 from . import apikeys
 from . import referral
+from . import tgbot
 from fastapi import WebSocket
 
 log = logging.getLogger("altaf")
@@ -217,6 +218,13 @@ def register(body: dict, request: Request, db=Depends(get_db)):
     log_event(db, "register", u.id, ip)
     db.commit()
     return {"token": make_token(u.id, u.token_version), "user": me_view(db, u)}
+
+
+@app.post("/api/tglink")
+def tg_link_code(u=Depends(current_user), db=Depends(get_db)):
+    code = tgbot.new_link_code(db, u.id)
+    db.commit()
+    return {"code": code, "bot": setting(db, "tg_bot_username")}
 
 
 @app.get("/api/referral")

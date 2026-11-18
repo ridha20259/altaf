@@ -19,7 +19,7 @@ def _pg_db():
 
 
 PG_DB = _pg_db()
-PATHS = ["/var/lib/altafchain", "/var/lib/altaf-signer", "/etc/altaf.env", "/etc/altaf-signer.env",
+PATHS = ["/var/lib/altafchain", "/var/lib/altaf-signer", "/etc/altaf.env", "/etc/altaf-signer.env", "/etc/altaf-tgbot.env",
          "/root/altaf-secrets", "/opt/altaf/app", "/opt/altaf/static", "/opt/altaf/token", "/opt/altaf/node",
          "/opt/altaf/tools", "/opt/altaf/requirements.txt", "/opt/altaf/NOTES.md", "/opt/altafchain/bin"]
 PATHS += [f"/etc/systemd/system/{n}" for n in os.listdir("/etc/systemd/system") if n.startswith("altaf")]
