@@ -5,6 +5,20 @@ PREFIX = "altaf/"
 KEEP = int(os.environ.get("ALTAF_BACKUP_KEEP", "30"))
 KEYFILE = os.environ.get("ALTAF_BACKUP_KEYFILE", "/root/altaf-backup.key")
 DB = "/opt/altaf/data/altaf.db"
+
+
+def _pg_db():
+    """Database name when the exchange runs on PostgreSQL (ALTAF_DB in /etc/altaf.env)."""
+    try:
+        for l in open("/etc/altaf.env"):
+            if l.startswith("ALTAF_DB=postgresql"):
+                return l.strip().rsplit("/", 1)[-1]
+    except OSError:
+        pass
+    return ""
+
+
+PG_DB = _pg_db()
 PATHS = ["/var/lib/altafchain", "/var/lib/altaf-signer", "/etc/altaf.env", "/etc/altaf-signer.env",
          "/root/altaf-secrets", "/opt/altaf/app", "/opt/altaf/static", "/opt/altaf/token", "/opt/altaf/node",
          "/opt/altaf/tools", "/opt/altaf/requirements.txt", "/opt/altaf/NOTES.md", "/opt/altafchain/bin"]
@@ -58,15 +72,23 @@ def b2_get(a, name):
 
 def build():
     with tempfile.TemporaryDirectory() as tmp:
-        snap = os.path.join(tmp, "altaf.db")
-        src, dst = sqlite3.connect(DB), sqlite3.connect(snap)
-        src.backup(dst)
-        rows = sum(dst.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-                   for (t,) in dst.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall())
-        src.close(); dst.close()
         tgz = os.path.join(tmp, "b.tgz")
+        if PG_DB:
+            snap, arc = os.path.join(tmp, "altaf.pgdump"), "opt/altaf/data/altaf.pgdump"
+            with open(snap, "wb") as f:
+                subprocess.run(["runuser", "-u", "postgres", "--", "pg_dump", "-Fc", PG_DB], check=True, stdout=f)
+            rows = int(subprocess.run(["runuser", "-u", "postgres", "--", "psql", "-Atd", PG_DB, "-c",
+                                       "SELECT COALESCE(SUM(n_live_tup),0) FROM pg_stat_user_tables"],
+                                      check=True, capture_output=True, text=True).stdout.strip() or 0)
+        else:
+            snap, arc = os.path.join(tmp, "altaf.db"), "opt/altaf/data/altaf.db"
+            src, dst = sqlite3.connect(DB), sqlite3.connect(snap)
+            src.backup(dst)
+            rows = sum(dst.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+                       for (t,) in dst.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall())
+            src.close(); dst.close()
         with tarfile.open(tgz, "w:gz") as tf:
-            tf.add(snap, "opt/altaf/data/altaf.db")
+            tf.add(snap, arc)
             for p in PATHS:
                 if os.path.exists(p):
                     tf.add(p, p.lstrip("/"), filter=skip)
