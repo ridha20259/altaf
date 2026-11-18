@@ -3,6 +3,8 @@ package core
 import (
 	"errors"
 	"fmt"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 type Account struct {
@@ -26,15 +28,69 @@ type State struct {
 	P        Params
 	Accounts map[string]*Account
 	G        Globals
+	Code     map[string][]byte
+	Storage  map[string]map[common.Hash]common.Hash
+	Receipts map[Hash]*Receipt
+	blk      blockCtx
+	record   bool // store receipts (only while applying blocks)
 }
 
 type undo struct {
-	g    Globals
-	accs map[string]*Account // nil = did not exist
+	g       Globals
+	accs    map[string]*Account // nil = did not exist
+	code    map[string][]byte
+	codeHad map[string]bool
+	stor    map[storKey]common.Hash
+	storHad map[storKey]bool
+}
+
+func newUndo(g Globals) *undo {
+	return &undo{g: g, accs: map[string]*Account{}, code: map[string][]byte{}, codeHad: map[string]bool{},
+		stor: map[storKey]common.Hash{}, storHad: map[storKey]bool{}}
+}
+
+func (s *State) setCode(a string, code []byte, u *undo) {
+	if u != nil {
+		if _, seen := u.codeHad[a]; !seen {
+			old, had := s.Code[a]
+			u.code[a], u.codeHad[a] = old, had
+		}
+	}
+	if code == nil {
+		delete(s.Code, a)
+	} else {
+		s.Code[a] = code
+	}
+}
+
+func (s *State) getStorage(k storKey) common.Hash { return s.Storage[k.A][k.K] }
+
+func (s *State) setStorage(k storKey, v common.Hash, u *undo) {
+	m := s.Storage[k.A]
+	if u != nil {
+		if _, seen := u.storHad[k]; !seen {
+			old, had := m[k.K]
+			u.stor[k], u.storHad[k] = old, had
+		}
+	}
+	if v == (common.Hash{}) {
+		if m != nil {
+			delete(m, k.K)
+			if len(m) == 0 {
+				delete(s.Storage, k.A)
+			}
+		}
+		return
+	}
+	if m == nil {
+		m = map[common.Hash]common.Hash{}
+		s.Storage[k.A] = m
+	}
+	m[k.K] = v
 }
 
 func NewState(p Params) *State {
-	s := &State{P: p, Accounts: map[string]*Account{}}
+	s := &State{P: p, Accounts: map[string]*Account{}, Code: map[string][]byte{}, Storage: map[string]map[common.Hash]common.Hash{}, Receipts: map[Hash]*Receipt{}}
 	s.G.PoolLeft = MiningPool
 	s.G.Supply = TotalSupply
 	s.Accounts[p.Bridge] = &Account{Balance: BridgeGenesis}
@@ -102,6 +158,29 @@ func (s *State) ApplyTx(t *Tx, u *undo) (fee uint64, err error) {
 	if a.Balance < t.Amount+t.Fee {
 		return 0, errors.New("insufficient balance")
 	}
+	if t.IsContract() || len(s.Code[t.To]) > 0 {
+		gas := t.Fee * GasPerUnit
+		if gas > MaxTxGas {
+			gas = MaxTxGas
+		}
+		if gas < intrinsicGas(t.Data, t.To == "") {
+			return 0, fmt.Errorf("fee too low for this contract tx: need at least %d units", intrinsicGas(t.Data, t.To == "")/GasPerUnit+1)
+		}
+		fa := s.acc(from, u)
+		fa.Balance -= t.Fee
+		nonce := fa.Nonce
+		if t.To != "" {
+			fa.Nonce++
+		}
+		rec := s.runEVM(from, t.To, t.Data, t.Amount, gas, u)
+		if fa = s.acc(from, u); fa.Nonce == nonce {
+			fa.Nonce++ // a failed creation still consumes the nonce
+		}
+		if s.record {
+			s.Receipts[t.ID()] = rec
+		}
+		return t.Fee, nil
+	}
 	fa := s.acc(from, u)
 	fa.Balance -= t.Amount + t.Fee
 	fa.Nonce++
@@ -111,11 +190,13 @@ func (s *State) ApplyTx(t *Tx, u *undo) (fee uint64, err error) {
 
 // ApplyBlock applies txs + rewards. Returns undo record. Caller checks header/PoW.
 func (s *State) ApplyBlock(b *Block, height uint64) (*undo, error) {
-	u := &undo{g: s.G, accs: map[string]*Account{}}
+	u := newUndo(s.G)
 	ch, miner, err := ParseCoinbase(b.Coinbase)
 	if err != nil {
 		return nil, err
 	}
+	s.blk, s.record = blockCtx{Height: height, Time: uint64(b.Header.Time), Miner: miner}, true
+	defer func() { s.record = false }()
 	if ch != height {
 		return nil, errors.New("coinbase height mismatch")
 	}
@@ -171,6 +252,20 @@ func (s *State) ApplyBlock(b *Block, height uint64) (*undo, error) {
 }
 
 func (s *State) Undo(u *undo) {
+	for a, had := range u.codeHad {
+		if had {
+			s.Code[a] = u.code[a]
+		} else {
+			delete(s.Code, a)
+		}
+	}
+	for k, had := range u.storHad {
+		if had {
+			s.setStorage(k, u.stor[k], nil)
+		} else {
+			s.setStorage(k, common.Hash{}, nil)
+		}
+	}
 	for a, v := range u.accs {
 		if v == nil {
 			delete(s.Accounts, a)

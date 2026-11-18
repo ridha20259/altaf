@@ -374,8 +374,9 @@ func (c *Chain) AddTx(t Tx) error {
 		return errors.New("mempool full")
 	}
 	// validate against state + pending txs of the same sender
-	u := &undo{g: c.state.G, accs: map[string]*Account{}}
+	u := newUndo(c.state.G)
 	defer c.state.Undo(u)
+	c.state.blk = blockCtx{Height: uint64(len(c.main)), Time: uint64(time.Now().Unix()), Miner: c.P.Founder}
 	for _, p := range c.sortedMempool() {
 		c.state.ApplyTx(&p, u)
 	}
@@ -432,7 +433,7 @@ func (c *Chain) Template(algo int, miner string) (*Template, error) {
 	if t.Time < t.MinTime {
 		t.Time = t.MinTime
 	}
-	u := &undo{g: c.state.G, accs: map[string]*Account{}}
+	u := newUndo(c.state.G)
 	for _, x := range c.sortedMempool() {
 		if len(t.Txs) >= MaxBlockTxs {
 			break
@@ -449,3 +450,30 @@ func (c *Chain) Template(algo int, miner string) (*Template, error) {
 }
 
 func (c *Chain) Close() error { return c.db.Close() }
+
+func (c *Chain) Code(a string) []byte {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.state.Code[a]
+}
+
+func (c *Chain) Receipt(id Hash) (*Receipt, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	r, ok := c.state.Receipts[id]
+	return r, ok
+}
+
+// CallContract runs a read-only call on the current state and throws the changes away.
+func (c *Chain) CallContract(from, to string, data []byte, value uint64) *Receipt {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if from == "" {
+		from = c.P.Bridge
+	}
+	u := newUndo(c.state.G)
+	defer c.state.Undo(u)
+	c.state.blk = blockCtx{Height: uint64(len(c.main)), Time: uint64(time.Now().Unix()), Miner: c.P.Founder}
+	c.state.acc(from, u).Balance += value
+	return c.state.runEVM(from, to, data, value, MaxTxGas, u)
+}

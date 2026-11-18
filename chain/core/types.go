@@ -83,13 +83,21 @@ type Tx struct {
 	Amount uint64 `json:"amount"`
 	Fee    uint64 `json:"fee"`
 	Nonce  uint64 `json:"nonce"`
-	Memo   string `json:"memo,omitempty"`
-	Sig    []byte `json:"sig"`
+	Memo   string   `json:"memo,omitempty"`
+	Data   HexBytes `json:"data,omitempty"` // contract bytecode (To == "") or call data
+	Sig    []byte   `json:"sig"`
 }
+
+// IsContract reports whether the tx deploys (To == "") or calls a contract with data.
+func (t *Tx) IsContract() bool { return t.To == "" || len(t.Data) > 0 }
 
 func (t *Tx) SigningBytes() []byte {
 	var b bytes.Buffer
-	b.WriteString("ALTF-TX-v1")
+	if t.IsContract() {
+		b.WriteString("ALTF-TX-v2")
+	} else {
+		b.WriteString("ALTF-TX-v1")
+	}
 	b.Write(t.From)
 	b.WriteByte(byte(len(t.To)))
 	b.WriteString(t.To)
@@ -100,6 +108,10 @@ func (t *Tx) SigningBytes() []byte {
 	}
 	b.WriteByte(byte(len(t.Memo)))
 	b.WriteString(t.Memo)
+	if t.IsContract() {
+		b.Write(binary.LittleEndian.AppendUint32(nil, uint32(len(t.Data))))
+		b.Write(t.Data)
+	}
 	return b.Bytes()
 }
 
@@ -116,11 +128,17 @@ func (t *Tx) CheckBasic() error {
 	if len(t.From) != ed25519.PublicKeySize || len(t.Sig) != ed25519.SignatureSize {
 		return errors.New("bad key/sig size")
 	}
-	if !ValidAddress(t.To) {
+	if t.To != "" && !ValidAddress(t.To) {
 		return errors.New("bad recipient address")
 	}
-	if t.Amount == 0 {
+	if t.Amount == 0 && !t.IsContract() {
 		return errors.New("zero amount")
+	}
+	if len(t.Data) > MaxCodeInput {
+		return errors.New("contract data too large")
+	}
+	if t.To == "" && len(t.Data) == 0 {
+		return errors.New("contract creation needs bytecode")
 	}
 	if t.Fee < MinFee {
 		return errors.New("fee below minimum 0.01 ALTF")

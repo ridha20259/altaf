@@ -299,7 +299,7 @@ func (n *Node) Handler() http.Handler {
 	})
 	tx := func(w http.ResponseWriter, r *http.Request) {
 		var t core.Tx
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&t); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&t); err != nil {
 			fail(w, err)
 			return
 		}
@@ -326,6 +326,46 @@ func (n *Node) Handler() http.Handler {
 			return
 		}
 		writeJSON(w, 200, loc)
+	})
+	m.HandleFunc("GET /receipt/{id}", func(w http.ResponseWriter, r *http.Request) {
+		h, err := core.HashFromString(r.PathValue("id"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		rc, ok := n.C.Receipt(h)
+		if !ok {
+			writeJSON(w, 404, map[string]string{"error": "no contract receipt for this tx"})
+			return
+		}
+		writeJSON(w, 200, rc)
+	})
+	m.HandleFunc("GET /contract/{addr}", func(w http.ResponseWriter, r *http.Request) {
+		a := r.PathValue("addr")
+		e, err := core.EvmAddress(a)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"address": a, "evm_address": e.Hex(), "balance": n.C.Account(a).Balance,
+			"code": core.HexBytes(n.C.Code(a)), "chain_id": core.ChainID})
+	})
+	m.HandleFunc("POST /call", func(w http.ResponseWriter, r *http.Request) {
+		var q struct {
+			From  string        `json:"from"`
+			To    string        `json:"to"`
+			Data  core.HexBytes `json:"data"`
+			Value uint64        `json:"value"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&q); err != nil {
+			fail(w, err)
+			return
+		}
+		if (q.To != "" && !core.ValidAddress(q.To)) || (q.From != "" && !core.ValidAddress(q.From)) {
+			fail(w, errors.New("bad address"))
+			return
+		}
+		writeJSON(w, 200, n.C.CallContract(q.From, q.To, q.Data, q.Value))
 	})
 	m.HandleFunc("GET /history/{addr}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, n.C.History(r.PathValue("addr")))

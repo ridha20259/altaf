@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 
 	"altafchain/core"
 )
@@ -20,7 +21,11 @@ func usage() {
 	fmt.Println(`altaf-wallet new <keyfile>
 altaf-wallet address <keyfile>
 altaf-wallet balance <node-url> <address>
-altaf-wallet send <node-url> <keyfile> <to-address> <amount-ALTF> [fee-ALTF] [memo]`)
+altaf-wallet send <node-url> <keyfile> <to-address> <amount-ALTF> [fee-ALTF] [memo]
+altaf-wallet deploy <node-url> <keyfile> <bytecode-hex-file> [fee-ALTF]          (Solidity/EVM contract)
+altaf-wallet call <node-url> <keyfile> <contract> <calldata-hex> [amount-ALTF] [fee-ALTF]
+altaf-wallet read <node-url> <contract> <calldata-hex>                           (free, read-only)
+altaf-wallet receipt <node-url> <txid>`)
 	os.Exit(1)
 }
 
@@ -109,7 +114,86 @@ func main() {
 		}
 		out, _ := io.ReadAll(r.Body)
 		fmt.Println(string(out))
+	case "deploy", "call":
+		if len(os.Args) < 5 || (os.Args[1] == "call" && len(os.Args) < 6) {
+			usage()
+		}
+		k := load(os.Args[3])
+		from := core.AddressFromPub(k.Public().(ed25519.PublicKey))
+		var a core.Account
+		if err := getJSON(os.Args[2]+"/account/"+from, &a); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		t := core.Tx{Fee: core.MinFee, Nonce: a.Nonce + 1}
+		feeArg := 5
+		if os.Args[1] == "deploy" {
+			b, err := os.ReadFile(os.Args[4])
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			t.Data = hexArg(strings.TrimSpace(string(b)))
+		} else {
+			t.To, t.Data, feeArg = os.Args[4], hexArg(os.Args[5]), 7
+			if len(os.Args) > 6 && os.Args[6] != "0" {
+				t.Amount = units(os.Args[6])
+			}
+		}
+		if len(os.Args) > feeArg {
+			t.Fee = units(os.Args[feeArg])
+		}
+		t.Sign(k)
+		j, _ := json.Marshal(t)
+		r, err := http.Post(os.Args[2]+"/tx", "application/json", bytes.NewReader(j))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		out, _ := io.ReadAll(r.Body)
+		fmt.Println(string(out))
+	case "read":
+		if len(os.Args) < 5 {
+			usage()
+		}
+		j, _ := json.Marshal(map[string]any{"to": os.Args[3], "data": core.HexBytes(hexArg(os.Args[4]))})
+		r, err := http.Post(os.Args[2]+"/call", "application/json", bytes.NewReader(j))
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		out, _ := io.ReadAll(r.Body)
+		fmt.Println(string(out))
+	case "receipt":
+		if len(os.Args) < 4 {
+			usage()
+		}
+		r, err := http.Get(os.Args[2] + "/receipt/" + os.Args[3])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		out, _ := io.ReadAll(r.Body)
+		fmt.Println(string(out))
 	default:
 		usage()
 	}
+}
+
+func hexArg(s string) []byte {
+	b, err := hex.DecodeString(strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X"))
+	if err != nil {
+		fmt.Println("bad hex:", err)
+		os.Exit(1)
+	}
+	return b
+}
+
+func getJSON(url string, v any) error {
+	r, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer r.Body.Close()
+	return json.NewDecoder(r.Body).Decode(v)
 }
