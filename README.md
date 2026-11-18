@@ -41,3 +41,12 @@ Configuration is read from environment variables (see `exchange/app/config.py`).
 ## License
 
 MIT
+
+## Bitcoin mining pool (partners with a bigger server)
+
+```bash
+curl -fsSL https://altafnet.187-126-9-68.sslip.io/install-bitcoind.sh | sudo bash   # pruned Bitcoin Core (~15 GB)
+# then run chain/cmd/altaf-btcpool with BTC_POOL_ADDRESS=<pool BTC address> and the RPC settings from /etc/altaf-btcpool.env
+```
+
+`altaf-btcpool` waits until the node is synced, then accepts ASIC miners (stratum v1, port 3334, username = ALTAF account e-mail). Found blocks and the PPLNS split (2 % pool fee) are written to `blocks.jsonl`.
